@@ -1,15 +1,26 @@
 # -----------------------------------------------------------------------
-# Workflow 2: deploy.yml
-# Builds .NET 9 app and deploys to Azure App Service via OIDC.
-# No publish profile. No static secrets. Short-lived token per run.
+# deploy.yml
+#
+# Branch strategy:
+#   dev  → push  → build + test ONLY (no deploy, acts as CI gate)
+#   main → merge → build + test + deploy to Azure (CD, OIDC auth)
+#
+# PR from dev to main requires build job to pass (enforce in branch rules).
+# Deploy job skips automatically on dev branch (if: condition).
 # -----------------------------------------------------------------------
 name: Build and Deploy .NET 9 to Azure
 
 on:
   push:
-    branches: [main]
+    branches: [dev, main]
     paths-ignore:
-      - 'infra/**'         # skip deploy-only run when only infra changed
+      - 'infra/**'    # infra changes handled by infra.yml
+      - '**.md'
+
+  pull_request:
+    branches: [main]  # run build+test on every PR targeting main
+    paths-ignore:
+      - 'infra/**'
       - '**.md'
 
 env:
@@ -19,10 +30,12 @@ env:
 
 jobs:
   # -----------------------------------------------------------------------
-  # Job 1: Build
+  # Job 1: Build + Test
+  # Runs on: dev push, main push, PR to main
+  # Blocks PR merge if this fails (enforce via branch protection rules)
   # -----------------------------------------------------------------------
   build:
-    name: Build
+    name: Build and Test
     runs-on: ubuntu-latest
 
     steps:
@@ -50,7 +63,7 @@ jobs:
 
       - name: Test
         run: dotnet test ${{ env.DOTNET_BUILD_PATH }} --configuration Release --no-build --verbosity normal
-        continue-on-error: false   # block deploy if tests fail
+        # Tests MUST pass — no continue-on-error. Deploy job will not run if this fails.
 
       - name: Publish
         run: dotnet publish ${{ env.DOTNET_BUILD_PATH }} \
@@ -66,20 +79,26 @@ jobs:
           retention-days: 1
 
   # -----------------------------------------------------------------------
-  # Job 2: Deploy
-  # Requires GitHub Environment "production" (enables approval gates,
-  # environment secrets, and pins OIDC subject claim to environment).
+  # Job 2: Deploy to Azure
+  # Runs ONLY on push to main (not dev, not PRs).
+  # Requires build job to pass first.
+  # Uses OIDC — no publish profile, no static secrets.
   # -----------------------------------------------------------------------
   deploy:
     name: Deploy to Azure
     runs-on: ubuntu-latest
     needs: build
+
+    # KEY GUARDRAIL: skip deploy entirely on dev branch and PRs
+    # Only execute when code lands on main via merged PR
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+
     environment:
-      name: production                           # MUST match github_environment in tfvars
+      name: production          # pins OIDC subject to repo+environment:production
       url: https://${{ env.AZURE_WEBAPP_NAME }}.azurewebsites.net
 
     permissions:
-      id-token: write    # REQUIRED: mint OIDC token for this job
+      id-token: write           # REQUIRED: allows GitHub to mint OIDC token
       contents: read
 
     steps:
@@ -89,8 +108,9 @@ jobs:
           name: dotnet-app
           path: ./myapp
 
-      # OIDC exchange: GH mints JWT → Azure AD validates subject claim
-      # → returns short-lived access token → no static secret involved
+      # OIDC token exchange:
+      # GitHub mints JWT → Azure AD validates subject claim
+      # → issues short-lived access token (~15 min) → no secret stored
       - name: Azure Login (OIDC)
         uses: azure/login@v2
         with:
@@ -106,7 +126,7 @@ jobs:
           package: ./myapp
 
       - name: Azure Logout
-        if: always()
+        if: always()            # always logout even if deploy fails
         run: az logout
 
       - name: Print deployment URL
