@@ -1,0 +1,113 @@
+# -----------------------------------------------------------------------
+# Workflow 2: deploy.yml
+# Builds .NET 9 app and deploys to Azure App Service via OIDC.
+# No publish profile. No static secrets. Short-lived token per run.
+# -----------------------------------------------------------------------
+name: Build and Deploy .NET 9 to Azure
+
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - 'infra/**'         # skip deploy-only run when only infra changed
+      - '**.md'
+
+env:
+  AZURE_WEBAPP_NAME: my-dotnet-app-prod   # must match webapp_name in terraform.tfvars
+  DOTNET_VERSION:    '9.0.x'
+  DOTNET_BUILD_PATH: './src'              # path to your .csproj folder
+
+jobs:
+  # -----------------------------------------------------------------------
+  # Job 1: Build
+  # -----------------------------------------------------------------------
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 9
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Cache NuGet packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: ${{ runner.os }}-nuget-${{ hashFiles('**/packages.lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-nuget-
+
+      - name: Restore dependencies
+        run: dotnet restore ${{ env.DOTNET_BUILD_PATH }}
+
+      - name: Build
+        run: dotnet build ${{ env.DOTNET_BUILD_PATH }} --configuration Release --no-restore
+
+      - name: Test
+        run: dotnet test ${{ env.DOTNET_BUILD_PATH }} --configuration Release --no-build --verbosity normal
+        continue-on-error: false   # block deploy if tests fail
+
+      - name: Publish
+        run: dotnet publish ${{ env.DOTNET_BUILD_PATH }} \
+              --configuration Release \
+              --no-build \
+              --output ${{ env.DOTNET_ROOT }}/myapp
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: dotnet-app
+          path: ${{ env.DOTNET_ROOT }}/myapp
+          retention-days: 1
+
+  # -----------------------------------------------------------------------
+  # Job 2: Deploy
+  # Requires GitHub Environment "production" (enables approval gates,
+  # environment secrets, and pins OIDC subject claim to environment).
+  # -----------------------------------------------------------------------
+  deploy:
+    name: Deploy to Azure
+    runs-on: ubuntu-latest
+    needs: build
+    environment:
+      name: production                           # MUST match github_environment in tfvars
+      url: https://${{ env.AZURE_WEBAPP_NAME }}.azurewebsites.net
+
+    permissions:
+      id-token: write    # REQUIRED: mint OIDC token for this job
+      contents: read
+
+    steps:
+      - name: Download artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: dotnet-app
+          path: ./myapp
+
+      # OIDC exchange: GH mints JWT → Azure AD validates subject claim
+      # → returns short-lived access token → no static secret involved
+      - name: Azure Login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id:       ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id:       ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Deploy to Azure Web App
+        id: deploy
+        uses: azure/webapps-deploy@v3
+        with:
+          app-name: ${{ env.AZURE_WEBAPP_NAME }}
+          package: ./myapp
+
+      - name: Azure Logout
+        if: always()
+        run: az logout
+
+      - name: Print deployment URL
+        run: echo "Deployed to ${{ steps.deploy.outputs.webapp-url }}"

@@ -1,0 +1,12 @@
+# Copy this file to terraform.tfvars and fill in your values.
+# NEVER commit terraform.tfvars to source control if it contains secrets.
+# Add terraform.tfvars to .gitignore.
+
+resource_group_name   = "dotnet-app-rg"
+location              = "canadacentral"
+app_service_plan_name = "dotnet-app-asp"
+webapp_name           = "my-dotnet-app-prod"   # must be globally unique in Azure
+dotnet_version        = "9.0"
+github_org            = "YOUR_GITHUB_ORG_OR_USERNAME"
+github_repo           = "YOUR_REPO_NAME"
+github_environment    = "production"
