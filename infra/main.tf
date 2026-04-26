@@ -139,3 +139,14 @@ resource "azurerm_federated_identity_credential" "gha_oidc" {
   issuer              = "https://token.actions.githubusercontent.com"
   subject             = "repo:${var.github_org}/${var.github_repo}:environment:${var.github_environment}"
 }
+
+data "azurerm_storage_account" "tfstate" {
+  name                = "tfstateacct2db2b4c2"
+  resource_group_name = "tfstate-rg"
+}
+
+resource "azurerm_role_assignment" "gha_tfstate_blob_contributor" {
+  scope                = data.azurerm_storage_account.tfstate.id
+  role_definition_name = "Storage Blob Data Contributor"
+  principal_id         = azurerm_user_assigned_identity.gha_identity.principal_id
+}
