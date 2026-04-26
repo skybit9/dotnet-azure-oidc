@@ -134,3 +134,16 @@ resource "azurerm_federated_identity_credential" "gha_oidc" {
   # Scoped to environment (stricter than branch-only)
   subject = "repo:${var.github_org}/${var.github_repo}:environment:${var.github_environment}"
 }
+
+# Get reference to existing tfstate storage account
+data "azurerm_storage_account" "tfstate" {
+  name                = "tfstateacct2db2b4c2"
+  resource_group_name = "tfstate-rg"
+}
+
+# Grant Managed Identity access to read/write Terraform state
+resource "azurerm_role_assignment" "gha_tfstate_contributor" {
+  scope                = data.azurerm_storage_account.tfstate.id
+  role_definition_name = "Storage Blob Data Contributor"
+  principal_id         = azurerm_user_assigned_identity.gha_identity.principal_id
+}
