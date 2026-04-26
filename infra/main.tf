@@ -8,7 +8,7 @@ terraform {
 
   backend "azurerm" {
     resource_group_name  = "tfstate-rg"
-    storage_account_name = "tfstateacct"   # must be globally unique, change this
+    storage_account_name = "tfstateacct2db2b4c2"   # must be globally unique, change this
     container_name       = "tfstate"
     key                  = "dotnet-app.tfstate"
   }
