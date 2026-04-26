@@ -8,7 +8,7 @@ terraform {
 
   backend "azurerm" {
     resource_group_name  = "tfstate-rg"
-    storage_account_name = "tfstateacct2db2b4c2"   # must be globally unique, change this
+    storage_account_name = "tfstateacct2db2b4c2"
     container_name       = "tfstate"
     key                  = "dotnet-app.tfstate"
   }
@@ -60,6 +60,11 @@ variable "github_environment" {
 }
 
 # -----------------------------------------------------------------------
+# Data: Current Subscription
+# -----------------------------------------------------------------------
+data "azurerm_subscription" "current" {}
+
+# -----------------------------------------------------------------------
 # Resource Group
 # -----------------------------------------------------------------------
 resource "azurerm_resource_group" "rg" {
@@ -79,7 +84,7 @@ resource "azurerm_service_plan" "asp" {
 }
 
 # -----------------------------------------------------------------------
-# Linux Web App (.NET 9)
+# Linux Web App (.NET 10)
 # -----------------------------------------------------------------------
 resource "azurerm_linux_web_app" "webapp" {
   name                = var.webapp_name
@@ -91,11 +96,11 @@ resource "azurerm_linux_web_app" "webapp" {
     application_stack {
       dotnet_version = var.dotnet_version
     }
-    always_on = false  # always_on not supported on B1
+    always_on = false
   }
 
   app_settings = {
-    ASPNETCORE_ENVIRONMENT = "dev"
+    ASPNETCORE_ENVIRONMENT   = "Development"
     WEBSITE_RUN_FROM_PACKAGE = "1"
   }
 
@@ -112,11 +117,13 @@ resource "azurerm_user_assigned_identity" "gha_identity" {
 }
 
 # -----------------------------------------------------------------------
-# Role Assignment: Website Contributor on Web App only (least privilege)
+# Role Assignment: Contributor at subscription scope
+# Allows GitHub Actions to manage all resources in this subscription
+# (needed for Terraform workflow to read/write all infra)
 # -----------------------------------------------------------------------
-resource "azurerm_role_assignment" "gha_webapp_contributor" {
-  scope                = azurerm_linux_web_app.webapp.id
-  role_definition_name = "Website Contributor"
+resource "azurerm_role_assignment" "gha_subscription_contributor" {
+  scope                = data.azurerm_subscription.current.id
+  role_definition_name = "Contributor"
   principal_id         = azurerm_user_assigned_identity.gha_identity.principal_id
 }
 
@@ -130,20 +137,5 @@ resource "azurerm_federated_identity_credential" "gha_oidc" {
   parent_id           = azurerm_user_assigned_identity.gha_identity.id
   audience            = ["api://AzureADTokenExchange"]
   issuer              = "https://token.actions.githubusercontent.com"
-
-  # Scoped to environment (stricter than branch-only)
-  subject = "repo:${var.github_org}/${var.github_repo}:environment:${var.github_environment}"
-}
-
-# Get reference to existing tfstate storage account
-data "azurerm_storage_account" "tfstate" {
-  name                = "tfstateacct2db2b4c2"
-  resource_group_name = "tfstate-rg"
-}
-
-# Grant Managed Identity access to read/write Terraform state
-resource "azurerm_role_assignment" "gha_tfstate_contributor" {
-  scope                = data.azurerm_storage_account.tfstate.id
-  role_definition_name = "Storage Blob Data Contributor"
-  principal_id         = azurerm_user_assigned_identity.gha_identity.principal_id
+  subject             = "repo:${var.github_org}/${var.github_repo}:environment:${var.github_environment}"
 }
