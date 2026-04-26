@@ -8,7 +8,7 @@
 # PR from dev to main requires build job to pass (enforce in branch rules).
 # Deploy job skips automatically on dev branch (if: condition).
 # -----------------------------------------------------------------------
-name: Build and Deploy .NET 8 to Azure
+name: Build and Deploy .NET 7 to Azure
 
 on:
   push:
@@ -25,7 +25,7 @@ on:
 
 env:
   AZURE_WEBAPP_NAME: my-dotnet-app-dev   # must match webapp_name in terraform.tfvars
-  DOTNET_VERSION:    '8.0.x'
+  DOTNET_VERSION:    '7.0.x'
   DOTNET_BUILD_PATH: './src'              # path to your .csproj folder
 
 jobs:
@@ -42,7 +42,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup .NET 8
+      - name: Setup .NET 7
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: ${{ env.DOTNET_VERSION }}
