@@ -38,12 +38,12 @@ variable "app_service_plan_name" {
 
 variable "webapp_name" {
   description = "Web App name (must be globally unique)"
-  default     = "my-dotnet-app-prod"
+  default     = "my-dotnet-app-dev"
 }
 
 variable "dotnet_version" {
   description = ".NET version for Linux web app"
-  default     = "9.0"
+  default     = "8.0"
 }
 
 variable "github_org" {
@@ -56,7 +56,7 @@ variable "github_repo" {
 
 variable "github_environment" {
   description = "GitHub Actions environment name (must match deploy workflow)"
-  default     = "production"
+  default     = "dev"
 }
 
 # -----------------------------------------------------------------------
@@ -95,7 +95,7 @@ resource "azurerm_linux_web_app" "webapp" {
   }
 
   app_settings = {
-    ASPNETCORE_ENVIRONMENT = "Production"
+    ASPNETCORE_ENVIRONMENT = "dev"
     WEBSITE_RUN_FROM_PACKAGE = "1"
   }
 
