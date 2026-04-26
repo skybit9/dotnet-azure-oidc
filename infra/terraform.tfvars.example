@@ -5,8 +5,8 @@
 resource_group_name   = "dotnet-app-rg"
 location              = "canadacentral"
 app_service_plan_name = "dotnet-app-asp"
-webapp_name           = "my-dotnet-app-dev"   # must be globally unique in Azure
+webapp_name           = "CHANGE-ME-globally-unique-name"
 dotnet_version        = "10.0"
-github_org            = "skybit9"
-github_repo           = "dotnet-azure-oidc"
+github_org            = "YOUR_GITHUB_ORG_OR_USERNAME"
+github_repo           = "YOUR_REPO_NAME"
 github_environment    = "dev"
