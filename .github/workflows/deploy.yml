@@ -26,7 +26,7 @@ on:
 env:
   AZURE_WEBAPP_NAME: my-dotnet-app-dev   # must match webapp_name in terraform.tfvars
   DOTNET_VERSION:    '7.0.x'
-  DOTNET_BUILD_PATH: './src'              # path to your .csproj folder
+  DOTNET_BUILD_PATH: './src/MyApp.csproj'              # path to your .csproj folder
 
 jobs:
   # -----------------------------------------------------------------------
@@ -94,7 +94,7 @@ jobs:
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
 
     environment:
-      name: production          # pins OIDC subject to repo+environment:production
+      name: dev          # pins OIDC subject to repo+environment:production
       url: https://${{ env.AZURE_WEBAPP_NAME }}.azurewebsites.net
 
     permissions:
