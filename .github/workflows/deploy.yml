@@ -19,9 +19,7 @@ on:
 
   pull_request:
     branches: [main]  # run build+test on every PR targeting main
-    paths-ignore:
-      - 'infra/**'
-      - '**.md'
+
 
 env:
   AZURE_WEBAPP_NAME: my-dotnet-app-dev   # must match webapp_name in terraform.tfvars
