@@ -9,3 +9,9 @@ infra/*.tfstate.backup
 
 # OS
 .DS_Store
+# .NET build artifacts
+src/obj/
+src/bin/
+
+# Vendor libraries (restored via dotnet restore)
+src/wwwroot/lib/

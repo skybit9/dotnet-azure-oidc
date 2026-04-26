@@ -2,7 +2,7 @@ terraform {
   required_providers {
     azurerm = {
       source  = "hashicorp/azurerm"
-      version = "~> 3.0"
+      version = "~> 4.0"
     }
   }
 
@@ -43,7 +43,7 @@ variable "webapp_name" {
 
 variable "dotnet_version" {
   description = ".NET version for Linux web app"
-  default     = "8.0"
+  default     = "10.0"
 }
 
 variable "github_org" {
