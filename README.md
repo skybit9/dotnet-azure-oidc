@@ -1,120 +1,150 @@
-# .NET 10 → Azure App Service via OIDC + Terraform
+<div align="center">
 
-Zero static secrets. OIDC federated identity. IaC-managed infra. Multi-environment deployment.
+# 🚀 .NET 10 → Azure App Service
+### via OIDC + Terraform + GitHub Actions
 
----
+[![.NET](https://img.shields.io/badge/.NET-10.0-512BD4?style=for-the-badge&logo=dotnet&logoColor=white)](https://dotnet.microsoft.com/)
+[![Terraform](https://img.shields.io/badge/Terraform-4.x-7B42BC?style=for-the-badge&logo=terraform&logoColor=white)](https://www.terraform.io/)
+[![Azure](https://img.shields.io/badge/Azure-App_Service-0078D4?style=for-the-badge&logo=microsoftazure&logoColor=white)](https://azure.microsoft.com/)
+[![GitHub Actions](https://img.shields.io/badge/GitHub_Actions-CI%2FCD-2088FF?style=for-the-badge&logo=githubactions&logoColor=white)](https://github.com/features/actions)
 
-## Architecture
+> **Zero static secrets. OIDC federated identity. IaC-managed infra. Multi-environment deployment.**
 
-```
-GitHub Actions (deploy job)
-  │
-  │  mint OIDC JWT (repo:skybit9/dotnet-azure-oidc:environment:dev|production)
-  ▼
-GitHub OIDC Provider
-  │
-  │  token exchange
-  ▼
-Azure AD (validates subject claim against federated credential)
-  │
-  │  short-lived access token (~15 min)
-  ▼
-User-Assigned Managed Identity
-  │
-  │  Contributor role (subscription scope)
-  ▼
-Azure Linux Web App (.NET 10, B1)
-```
+[![Dev](https://img.shields.io/badge/dev-my--dotnet--app--dev.azurewebsites.net-blue?style=flat-square&logo=microsoftazure)](https://my-dotnet-app-dev.azurewebsites.net)
+[![Prod](https://img.shields.io/badge/prod-my--dotnet--app--prod.azurewebsites.net-success?style=flat-square&logo=microsoftazure)](https://my-dotnet-app-prod.azurewebsites.net)
+
+</div>
 
 ---
 
-## Branch Strategy
+## 🏗️ Architecture
 
 ```
-dev branch  →  push  →  build + test ONLY (CI gate, no deploy)
-     │
-     │  Pull Request to main (Build and Test must pass)
-     ▼
-main branch →  merge →  build + test + deploy
-                              │
-                              ├── deploy to dev subscription (environment: dev)
-                              └── deploy to prod subscription (environment: production)
+┌─────────────────────────────────────────────────────────────┐
+│                     GitHub Actions                          │
+│                                                             │
+│   push to dev  ──►  Build + Test (CI gate)                  │
+│   merge to main ──► Build + Test + Deploy                   │
+└──────────────────────────┬──────────────────────────────────┘
+                           │ mint OIDC JWT
+                           │ repo:skybit9/dotnet-azure-oidc
+                           │ :environment:dev|prod
+                           ▼
+┌─────────────────────────────────────────────────────────────┐
+│                   GitHub OIDC Provider                      │
+└──────────────────────────┬──────────────────────────────────┘
+                           │ token exchange
+                           ▼
+┌─────────────────────────────────────────────────────────────┐
+│      Azure AD (validates subject claim against              │
+│      federated credential)                                  │
+└──────────────────────────┬──────────────────────────────────┘
+                           │ short-lived access token (~15 min)
+                           ▼
+┌─────────────────────────────────────────────────────────────┐
+│         User-Assigned Managed Identity                      │
+│         Contributor role (subscription scope)               │
+└────────────────┬─────────────────────┬──────────────────────┘
+                 │                     │
+                 ▼                     ▼
+     ┌───────────────────┐   ┌───────────────────┐
+     │  Azure Dev Sub    │   │  Azure Prod Sub    │
+     │  my-dotnet-app    │   │  my-dotnet-app     │
+     │  -dev             │   │  -prod             │
+     │  (.NET 10, B1)    │   │  (.NET 10, B1)     │
+     └───────────────────┘   └───────────────────┘
 ```
 
 ---
 
-## Environments
+## 🌿 Branch Strategy
 
-| Environment | Azure Subscription | Web App | GitHub Environment |
-|-------------|-------------------|---------|-------------------|
-| dev | dev | my-dotnet-app-dev | dev |
-| prod | prod | my-dotnet-app-prod | production |
+```
+┌─────────────────────────────────────────────────────────────┐
+│  dev branch                                                 │
+│  push  ──►  🔨 Build + Test (no deploy)                     │
+│  PR to main ──► 🔨 Build + Test must pass ──► merge allowed │
+└──────────────────────────┬──────────────────────────────────┘
+                           │ merge
+                           ▼
+┌─────────────────────────────────────────────────────────────┐
+│  main branch                                                │
+│  🔨 Build + Test                                            │
+│       ├──► 🟦 Deploy to DEV   (auto, no approval)           │
+│       └──► 🟩 Deploy to PROD  (requires approval gate)      │
+└─────────────────────────────────────────────────────────────┘
+```
 
 ---
 
-## First-Time Setup (run once per environment)
+## 🌍 Environments
 
-### 1. Bootstrap Terraform state storage
+| | Dev | Prod |
+|--|-----|------|
+| **Azure Subscription** | dev | prod |
+| **Web App** | my-dotnet-app-dev | my-dotnet-app-prod |
+| **GitHub Environment** | dev | prod |
+| **Approval required** | ❌ No | ✅ Yes |
+| **Deployment branch** | Any | `main` only |
+| **OIDC Subject** | `environment:dev` | `environment:prod` |
+
+---
+
+## ⚡ Quick Start (First-Time Setup)
+
+### 1️⃣ Bootstrap Terraform State Storage
 
 ```bash
 chmod +x bootstrap.sh
-# For dev:
+
+# Dev subscription:
 az account set --subscription "dev"
 ./bootstrap.sh
 
-# For prod:
+# Prod subscription:
 az account set --subscription "prod"
 ./bootstrap.sh
 ```
 
-Copy each printed `storage_account_name` into the respective backend block in `main.tf`.
-
-### 2. Configure terraform.tfvars
+### 2️⃣ Configure Variables
 
 ```bash
-# For dev:
+# Dev:
 cp infra/terraform.tfvars.example infra/terraform.tfvars
-# Edit with dev values
 
-# For prod:
+# Prod:
 cp infra/terraform.tfvars.example infra/terraform.tfvars.prod
-# Edit with prod values
+# Edit: resource_group_name, webapp_name, github_environment = "prod"
 ```
 
-Add both to `.gitignore` — never commit real values.
+> ⚠️ Both files are gitignored. Never commit them.
 
-### 3. Apply Terraform per environment
+### 3️⃣ Provision Infrastructure
 
 ```bash
 cd infra
 
 # Dev:
 az account set --subscription "dev"
-terraform init
-terraform apply
+terraform init && terraform apply
 
-# Prod (separate state):
+# Prod:
 az account set --subscription "prod"
 terraform init -backend-config="storage_account_name=PROD_SA_NAME" -reconfigure
 terraform apply -var-file="terraform.tfvars.prod"
 ```
 
-### 4. Set GitHub Secrets
+### 4️⃣ Set GitHub Secrets (per environment)
 
-Settings → Secrets and variables → Actions
-
-**Repository-level (used by both environments):**
-None needed — all secrets are environment-scoped.
-
-**Environment: dev**
+**Environment: `dev`**
 
 | Secret | Value |
 |--------|-------|
-| `AZURE_CLIENT_ID` | dev managed identity client ID |
-| `AZURE_TENANT_ID` | dev tenant ID |
+| `AZURE_CLIENT_ID` | `managed_identity_client_id` from `terraform output` |
+| `AZURE_TENANT_ID` | `tenant_id` from `terraform output` |
 | `AZURE_SUBSCRIPTION_ID` | dev subscription ID |
 
-**Environment: production**
+**Environment: `prod`**
 
 | Secret | Value |
 |--------|-------|
@@ -122,70 +152,86 @@ None needed — all secrets are environment-scoped.
 | `AZURE_TENANT_ID` | prod tenant ID |
 | `AZURE_SUBSCRIPTION_ID` | prod subscription ID |
 
-### 5. Create GitHub Environments
-
-Settings → Environments
+### 5️⃣ Create GitHub Environments
 
 | Environment | Required reviewers | Deployment branch |
 |-------------|-------------------|-------------------|
 | `dev` | None | Any |
-| `production` | Add yourself | `main` only |
+| `prod` | Add yourself | `main` only |
 
-### 6. Push to main
+### 6️⃣ Push and Deploy
 
-Workflow triggers automatically. Dev deploys first, prod deploys after approval.
+```bash
+git push origin dev    # triggers Build + Test
+# open PR → merge to main → triggers full deploy
+```
 
 ---
 
-## Folder Structure
+## 📁 Folder Structure
 
 ```
-.
+dotnet-azure-oidc/
 ├── .github/
 │   └── workflows/
-│       ├── infra.yml          # Terraform: provisions Azure infra
-│       └── deploy.yml         # Build + deploy .NET 10 app via OIDC
+│       ├── infra.yml               # Terraform: provisions Azure infra
+│       └── deploy.yml              # Build + deploy .NET 10 via OIDC
 ├── infra/
-│   ├── main.tf                # RG, ASP, Web App, OIDC identity, roles
-│   ├── outputs.tf             # Prints values needed for GH secrets
-│   ├── terraform.tfvars.example  # Template — safe to commit
-│   └── terraform.tfvars       # Real values — gitignored, never commit
-├── src/                       # .NET 10 Razor Pages app
-├── bootstrap.sh               # One-time: creates TF state storage
+│   ├── main.tf                     # RG, ASP, Web App, OIDC identity, roles
+│   ├── outputs.tf                  # Prints values for GitHub secrets
+│   ├── terraform.tfvars.example    # Template — safe to commit
+│   └── terraform.tfvars            # Real values — gitignored ⚠️
+├── src/                            # .NET 10 Razor Pages app
+│   └── MyApp.csproj
+├── bootstrap.sh                    # One-time TF state storage setup
+├── .gitignore
 └── README.md
 ```
 
 ---
 
-## Security Properties
+## 🔒 Security Properties
 
 | Property | Value |
 |----------|-------|
-| Token lifetime | ~15 minutes per workflow run |
-| Static secrets stored | None |
-| Blast radius | Contributor on dev/prod subscription (scoped per environment) |
-| OIDC subject pin | repo + environment (dev or production) |
-| Audit trail | Azure Activity Log shows identity + workflow run |
-| Rotation required | Never |
-| Kudu SCM access | Not directly granted |
+| 🕐 Token lifetime | ~15 minutes per workflow run |
+| 🔑 Static secrets stored | **None** |
+| 💥 Blast radius | Contributor scoped per subscription |
+| 📌 OIDC subject pin | `repo + environment` (dev or prod) |
+| 📋 Audit trail | Azure Activity Log: identity + workflow run |
+| 🔄 Rotation required | **Never** |
+| 🚫 Kudu SCM access | Not directly granted |
 
 ---
 
-## Workflow: What Happens on Merge to Main
+## 🔄 What Happens on Merge to Main
 
-1. `build` job: restore → build → test → publish → upload artifact
-2. `deploy-dev` job: OIDC login to dev sub → deploy to `my-dotnet-app-dev`
-3. `deploy-prod` job: waits for approval → OIDC login to prod sub → deploy to `my-dotnet-app-prod`
-4. `az logout` after each deploy
-5. Tokens expire within 15 minutes regardless
+```
+1. 🔨  build job       → restore → build → test → publish → upload artifact
+2. 🟦  deploy-dev job  → OIDC login (dev) → deploy to my-dotnet-app-dev → logout
+3. ⏸️  approval gate   → reviewer approves prod deployment
+4. 🟩  deploy-prod job → OIDC login (prod) → deploy to my-dotnet-app-prod → logout
+5. ⏱️  tokens expire   → within 15 minutes regardless
+```
 
 ---
 
-## Tech Stack
+## 🛠️ Tech Stack
 
-- **Runtime:** .NET 10 (ASP.NET Core Razor Pages)
-- **Hosting:** Azure App Service (Linux, B1)
-- **IaC:** Terraform (azurerm ~> 4.0, remote state in Azure Storage)
-- **CI/CD:** GitHub Actions
-- **Auth:** OIDC federated identity (User-Assigned Managed Identity)
-- **Version control:** GitHub (public repo, branch protection on main)
+| Layer | Technology |
+|-------|-----------|
+| **Runtime** | .NET 10 (ASP.NET Core Razor Pages) |
+| **Hosting** | Azure App Service (Linux, B1) |
+| **IaC** | Terraform (azurerm ~> 4.0) |
+| **State** | Azure Storage Account (remote backend) |
+| **CI/CD** | GitHub Actions |
+| **Auth** | OIDC + User-Assigned Managed Identity |
+| **Source control** | GitHub (public, branch protection on `main`) |
+
+---
+
+<div align="center">
+
+Built by **skybit9** · [View on GitHub](https://github.com/skybit9/dotnet-azure-oidc)
+
+</div>
